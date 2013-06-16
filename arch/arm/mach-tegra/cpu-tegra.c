@@ -551,7 +551,7 @@ int tegra_update_cpu_speed(unsigned long rate)
 	if (freqs.old == freqs.new)
 		return ret;
 
-	if (freqs.new < rate_save && rate_save >= 880000) {
+	if (rate_save > 475000) {
 		if (is_lp_cluster()) {
 			orig_nice = task_nice(current);
 
@@ -747,6 +747,7 @@ module_param(bthp_relax, uint, 0644);
 unsigned int mips_aggressive_factor = 6;
 module_param(mips_aggressive_factor, uint, 0644);
 EXPORT_SYMBOL (mips_aggressive_factor);
+#endif
 
 /* disable edp limitations */
 unsigned int no_edp_limit = 0;
@@ -758,6 +759,7 @@ unsigned int no_thermal_throttle_limit = 0;
 module_param(no_thermal_throttle_limit, uint, 0644);
 EXPORT_SYMBOL (no_thermal_throttle_limit);
 
+#if defined(CONFIG_BEST_TRADE_HOTPLUG)
 DEFINE_PER_CPU(unsigned long, last_freq_update_jiffies) = {0UL};
 
 struct {
@@ -1565,7 +1567,7 @@ static unsigned int _do_trade_bargain (
 	/* NOT necessary to do bargain;
 	 * instead, catch up with required numbers of cpus ASAP
 	 */
-    if (params.active_cpus < pm_qos_request (PM_QOS_MIN_ONLINE_CPUS)) {
+    if (params.active_cpus < pm_qos_request (1)) {
         if (!bthp_cpu_num_catchup ())
             CPU_DEBUG_PRINTK (CPU_DEBUG_BTHP,
                               " cannot bring up # of cpus required"
@@ -1608,7 +1610,7 @@ static unsigned int _do_trade_bargain (
     params.qos.min_freq = cpu_get_min_speed (params.cpu);
     params.qos.max_freq =
         arbitrated_max_freq (cpu_get_max_speed (params.cpu));
-    params.qos.min_cpus = pm_qos_request (PM_QOS_MIN_ONLINE_CPUS)? :1;
+    params.qos.min_cpus = pm_qos_request (1)? :1;
     params.qos.max_cpus = pm_qos_request (PM_QOS_MAX_ONLINE_CPUS)? :NR_CPUS;
 
     /* IF
@@ -1813,7 +1815,7 @@ nothing_bargain:
                     * switch between G and LP clusters back and forth
                     * would somewhat downgrade his/her performance requirement
                     */
-                   //!pm_qos_request (PM_QOS_MIN_ONLINE_CPUS) &&
+                   //!pm_qos_request (1) &&
                    next_speed <= g2lp_bottom_freq())
         {
             if (!bthp_do_hotplug (BTHP_DECISION (CPU_DOWN),
@@ -2130,38 +2132,39 @@ static int tegra_pm_notify(struct notifier_block *nb, unsigned long event,
 	void *dummy)
 {
 	int cpu;
-	if (event == PM_SUSPEND_PREPARE) {
+	if (event == PM_SUSPEND_PREPARE)
+	{
 		mutex_lock(&tegra_cpu_lock);
 		is_suspended = true;
-		pr_info("Tegra cpufreq suspend: setting frequency to %d kHz\n",
-			freq_table[suspend_index].frequency);
-		tegra_update_cpu_speed(freq_table[suspend_index].frequency);
-		tegra_auto_hotplug_governor(
-			freq_table[suspend_index].frequency, true);
-		mutex_unlock(&tegra_cpu_lock);
-		for_each_online_cpu(cpu) {
+		for_each_online_cpu(cpu)
+		{
 			if(cpu==0)
+			{
+				tegra_update_cpu_speed(CAP_CPU_FREQ_MAX);
+				tegra_auto_hotplug_governor(CAP_CPU_FREQ_MAX, true);
+				mutex_unlock(&tegra_cpu_lock);
 				continue;
+			}
 			cpu_down(cpu);
 		}
-	} else if (event == PM_POST_SUSPEND) {
+	} else if (event == PM_POST_SUSPEND)
+	{
 		unsigned int freq;
 		mutex_lock(&tegra_cpu_lock);
 		is_suspended = false;
 		tegra_cpu_edp_init(true);
-		if (wake_reason_resume == 0x80) {
-			tegra_update_cpu_speed(BOOST_CPU_FREQ_MIN);
-			tegra_auto_hotplug_governor(
-				BOOST_CPU_FREQ_MIN, false);
-		} else {
-			tegra_cpu_set_speed_cap(&freq);
-		}
+		//if (wake_reason_resume == 0x80) {   ----- DON'T NEED ANY OF THIS!
+		//	tegra_update_cpu_speed(BOOST_CPU_FREQ_MIN);
+		//	tegra_auto_hotplug_governor(
+		//		BOOST_CPU_FREQ_MIN, false); 
+		//} else {
+		//	tegra_cpu_set_speed_cap(&freq);
+		//}
 
-		pr_info("Tegra cpufreq resume: restoring frequency to %d kHz\n",
-			freq);
+		//pr_info("Tegra cpufreq resume: restoring frequency to %d kHz\n",
+		//	freq);
 		mutex_unlock(&tegra_cpu_lock);
 	}
-
 	return NOTIFY_OK;
 }
 

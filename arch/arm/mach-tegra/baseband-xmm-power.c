@@ -43,7 +43,7 @@
 
 MODULE_LICENSE("GPL");
 
-unsigned long modem_ver = XMM_MODEM_VER_1121;
+unsigned long modem_ver = XMM_MODEM_VER_1130;
 
 
 /*
@@ -210,6 +210,7 @@ static struct work_struct init2_work;
 static struct work_struct L2_resume_work;
 static struct delayed_work init4_work;
 static struct baseband_power_platform_data *baseband_power_driver_data;
+static int waiting_falling_flag = 0;
 static bool register_hsic_device;
 static struct wake_lock wakelock;
 static struct usb_device *usbdev;
@@ -894,6 +895,7 @@ static int baseband_xmm_power_off(struct platform_device *device)
 	wakeup_pending = false;
 	system_suspending = false;
 	spin_unlock_irqrestore(&xmm_lock, flags);
+	register_hsic_device = true; //start reg process again for xmm on
 #if 0 /*HTC*/
 	pr_debug(MODULE_NAME " htc_get_pcbid_info= %d\n", htcpcbid);
 	if(htcpcbid< PROJECT_PHASE_XE) {
@@ -927,6 +929,7 @@ static ssize_t baseband_xmm_onoff(struct device *dev,
 	/* check input */
 	if (buf == NULL) {
 		pr_err("%s: buf NULL\n", __func__);
+		mutex_unlock(&baseband_xmm_onoff_lock);
 		return -EINVAL;
 	}
 	/* pr_debug("%s: count=%d\n", __func__, count); */
@@ -942,10 +945,11 @@ static ssize_t baseband_xmm_onoff(struct device *dev,
 	size = sscanf(buf, "%d", &power_onoff);
 	if (size != 1) {
 		pr_err("%s: size=%d -EINVAL\n", __func__, size);
+		mutex_unlock(&baseband_xmm_onoff_lock);
 		return -EINVAL;
 	}
 #endif /* !BB_XMM_OEM1 */
-
+	
 	pr_debug("%s power_onoff=%d count=%d, buf[0]=0x%x\n",
 		__func__, power_onoff, count, buf[0]);
 
@@ -1061,7 +1065,7 @@ void baseband_xmm_set_power_status(unsigned int status)
 	case BBXMM_PS_L3:
 		if (baseband_xmm_powerstate == BBXMM_PS_L2TOL0) {
                        pr_info("%s: baseband_xmm_powerstate == BBXMM_PS_L2TOL0\n", __func__);
-                       if (!data->modem.xmm.ipc_ap_wake) {
+                       if (!gpio_get_value(data->modem.xmm.ipc_ap_wake)) {
 				spin_lock_irqsave(&xmm_lock, flags);
 				wakeup_pending = true;
 				spin_unlock_irqrestore(&xmm_lock, flags);
@@ -1077,10 +1081,11 @@ void baseband_xmm_set_power_status(unsigned int status)
 			pr_info("L3 --- wake_unlock[%s]\n", wakelock.name);
 			wake_unlock(&wakelock);
 		}
-
-		gpio_set_value(data->modem.xmm.ipc_hsic_active, 0);
-
-		pr_info("Set gpio host active low->\n");
+		if (wakeup_pending == false) {
+			gpio_set_value(data->modem.xmm.ipc_hsic_active, 0);
+			waiting_falling_flag = 0;
+			pr_debug("gpio host active low->\n");
+		}
 		break;
 #endif
 	case BBXMM_PS_L2TOL0:
@@ -1094,15 +1099,19 @@ void baseband_xmm_set_power_status(unsigned int status)
 			baseband_xmm_powerstate = status;
 			//pr_debug("BB XMM POWER STATE = %d\n", status);
 			baseband_xmm_power_L2_resume();
-		}else{
-			baseband_xmm_powerstate = status;
-		}
+		} else
+			goto exit_without_state_change;
 	default:
-		baseband_xmm_powerstate = status;
 		break;
 	}
+	baseband_xmm_powerstate = status;
+	pr_debug("BB XMM POWER STATE = %d\n", status);
+	return;
 
-	pr_info(MODULE_NAME "%s } baseband_xmm_powerstate = %d\n", __func__, baseband_xmm_powerstate);
+exit_without_state_change:
+	pr_debug("BB XMM POWER STATE = %d (not change to %d)\n",
+			baseband_xmm_powerstate, status);
+	return;
 }
 EXPORT_SYMBOL_GPL(baseband_xmm_set_power_status);
 
@@ -1122,6 +1131,10 @@ irqreturn_t baseband_xmm_power_ipc_ap_wake_irq(int irq, void *dev_id)
 			pr_debug("%s - IPC_AP_WAKE_INIT1"
 				" - got falling edge\n",
 				__func__);
+			if (waiting_falling_flag == 0) {
+				pr_debug("%s return because irq must get the rising event at first\n", __func__);
+				return IRQ_HANDLED;
+			}
 			/* go to IPC_AP_WAKE_INIT1 state */
 			ipc_ap_wake_state = IPC_AP_WAKE_INIT1;
 			/* queue work */
@@ -1130,6 +1143,7 @@ irqreturn_t baseband_xmm_power_ipc_ap_wake_irq(int irq, void *dev_id)
 			pr_debug("%s - IPC_AP_WAKE_INIT1"
 				" - wait for falling edge\n",
 				__func__);
+			waiting_falling_flag = 1;
 		}
 	} else if (ipc_ap_wake_state == IPC_AP_WAKE_INIT1) {
 		if (!value) {

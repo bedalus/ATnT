@@ -23,7 +23,7 @@ cp -f arch/arm/boot/zImage kernelinjector.oxp/zImage.new/zImage
 
 cd kernelinjector.oxp
 ./compile
-cp bootimg.out/boot.img ~/Documents_OSX/boot.img
+cp bootimg.out/boot.img ~/Documents_OSX/boot_ATnT.img
 cd ..
 
 #gzip kernelinjector.oxp/structure.new/modules/* kernelinjector.oxp/structure.new/modules/mods.tar.gz
