@@ -1,5 +1,5 @@
 # Copyright (C) 2012 The Android Open Source Project
-# Adapted from Android Revolution HD
+#
 # IMPORTANT: Do not create world writable files or directories.
 # This is a common source of Android security bugs.
 #
@@ -84,9 +84,7 @@ loglevel 3
     write /proc/sys/kernel/sched_rt_runtime_us 950000
     write /proc/sys/kernel/sched_rt_period_us 1000000
 
-
 # NETWORK: NAT setting
-# To prevent out of WINDOW ACK from making
 # connection tracking to treat them as INVALID packet
     write /proc/sys/net/netfilter/nf_conntrack_tcp_be_liberal 1
 
@@ -113,6 +111,7 @@ loglevel 3
     mkdir /dev/cpuctl/apps/bg_non_interactive
     chown system system /dev/cpuctl/apps/bg_non_interactive/tasks
     chmod 0666 /dev/cpuctl/apps/bg_non_interactive/tasks
+    # 5.0 %
     write /dev/cpuctl/apps/bg_non_interactive/cpu.shares 52
     write /dev/cpuctl/apps/bg_non_interactive/cpu.rt_runtime_us 700000
     write /dev/cpuctl/apps/bg_non_interactive/cpu.rt_period_us 1000000
@@ -168,7 +167,6 @@ on post-fs
 
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
-
 
 on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
@@ -237,7 +235,7 @@ on post-fs-data
     chmod 0660 /data/data/com.android.providers.settings/databases/settings.db-wal
     chmod 0660 /data/data/com.android.providers.settings/databases/settings.db-shm
     chmod 0660 /data/data/com.android.providers.settings/databases/settings.db-journal
-    # HTC add: for customization wizard folder
+    # HTC add: for customization wizard folder#
     mkdir /data/data/cw 0770 root cw_access
     mkdir /data/data/cwtemp 0770 root cw_access
 
@@ -251,8 +249,8 @@ on post-fs-data
     # HTC add: double check the perms of /data/data/recovery for already existed case
     chown root recvy_access /data/data/recovery
     chmod 0775 /data/data/recovery
-
-# +SSD_RIL: from Qualcomm socket path
+        
+#+SSD_RIL: from Qualcomm socket path
     mkdir /dev/socket/qmux_radio 0770 radio radio
     mkdir /dev/socket/qmux_audio 0770 audio audio
     mkdir /dev/socket/qmux_bluetooth 0770 bluetooth bluetooth
@@ -392,6 +390,7 @@ on boot
 # Set this property so surfaceflinger is not started by system_init
     setprop system_init.startsurfaceflinger 0
 
+    start sysinit
     class_start core
     class_start main
 
@@ -426,7 +425,7 @@ on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start
     class_reset main
 
-# Daemon processes to be run by init.
+## Daemon processes to be run by init.
 service ueventd /sbin/ueventd
     class core
     critical
@@ -449,7 +448,7 @@ service adbd /sbin/adbd
 
 service sfc /sbin/sfc
     class core
-    oneshot
+	oneshot
 
 service servicemanager /system/bin/servicemanager
     class core
@@ -498,7 +497,6 @@ service kickstart /system/bin/qcks -1 modem_st1 -2 modem_st2 -3 mdm9k_config -i 
     class core
     oneshot
 
-
 service ril-daemon /system/bin/rild
     class core
     socket rild stream 660 root radio
@@ -535,7 +533,7 @@ service drm /system/bin/drmserver
     class main
     user drm
     group drm system inet drmrpc sdcard_r
-
+    
 service userinit /system/xbin/busybox run-parts /system/etc/init.d
     oneshot
     class late_start
@@ -566,7 +564,6 @@ service bluetoothd /system/bin/logwrapper /system/bin/bluetoothd -n -d
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
-    # let bluetoothd drop uid to bluetooth with the right linux capabilities
     group bluetooth net_bt_admin misc
     disabled
 
@@ -653,6 +650,3 @@ service L2PE /system/bin/l2_profile_exchange handset wlan1
     chmod 0660 /sys/class/rfkill/rfkill0/type
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/type
-
-
-
