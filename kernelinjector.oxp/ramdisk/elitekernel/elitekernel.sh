@@ -13,7 +13,6 @@ chmod -R 777 /system/etc/init.d
 sync
 
 # force insert modules that are required
-insmod /system/lib/modules/bcmdhd.ko
 insmod /system/lib/modules/baseband_xmm_power2.ko
 insmod /system/lib/modules/raw_ip_net.ko
 insmod /system/lib/modules/baseband_usb_chr.ko

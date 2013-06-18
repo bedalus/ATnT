@@ -143,8 +143,6 @@ static int synaptics_init_panel(struct synaptics_ts_data *ts);
 
 static irqreturn_t synaptics_irq_thread(int irq, void *ptr);
 
-extern int get_tamper_sf(void);
-
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
 /***
  *  S2W free swipe and stroke variables
@@ -3073,11 +3071,6 @@ static int synaptics_ts_probe(
 		printk(KERN_INFO "[TP] Load display resolution: %dx%d\n", pdata->display_width, pdata->display_height);
 		ts->width_factor = (pdata->display_width<<SHIFT_BITS)/(ts->layout[1]-ts->layout[0]);
 		ts->height_factor = (pdata->display_height<<SHIFT_BITS)/(ts->layout[3]-ts->layout[2]);
-	}
-
-	if(get_tamper_sf()==0) {
-		ts->debug_log_level |= BIT(3);
-		printk(KERN_INFO "[TP] Debug log level=0x%02X\n", ts->debug_log_level);
 	}
 
 	if (get_address_base(ts, 0x19, FUNCTION)) {
