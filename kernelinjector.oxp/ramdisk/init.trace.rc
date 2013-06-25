@@ -1,5 +1,4 @@
-# Permissions to allow system-wide tracing to the kernel trace buffer.
-# Edited for Android Revolution HD
+## Permissions to allow system-wide tracing to the kernel trace buffer.
 on boot
 
 # Allow writing to the kernel trace log.
@@ -29,4 +28,3 @@ on boot
 # Allow only the shell group to read and truncate the kernel trace.
     chown root shell /sys/kernel/debug/tracing/trace
     chmod 0660 /sys/kernel/debug/tracing/trace
-
