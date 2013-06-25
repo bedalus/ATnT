@@ -220,6 +220,7 @@ config HTC_PROJECT
        select ANDROID_RAM_CONSOLE_APPEND_PMIC_STATUS_BITS
        select DEBUG_MUTEXES
        select HTC_POWER_OFF
+       select DEBUG_CREDENTIALS
        help
          HTC Project
 
@@ -263,7 +264,7 @@ config MACH_ENRC2U
          Support for HTC EndeavorC2#U platform
 
 config MACH_ENRC2B
-       bool "EndeavorC2#U board"
+       bool "EndeavorC2#B board"
        depends on ARCH_TEGRA_3x_SOC
        depends on HTC_PROJECT
        select MACH_HAS_SND_SOC_TEGRA_MAX98088 if SND_SOC
@@ -572,7 +573,7 @@ config TEGRA_CBUS_CLOCK_DIVIDER
         int "CBUS clock divider"
         default "2"
 
-config TEGRA_CONVSERVATIVE_GOV_ON_EARLYSUPSEND
+config TEGRA_CONSERVATIVE_GOV_ON_EARLY_SUPSEND
 	bool "Use conservative cpu frequency governor when device enters early suspend"
 	depends on HAS_EARLYSUSPEND && CPU_FREQ
 	default n
