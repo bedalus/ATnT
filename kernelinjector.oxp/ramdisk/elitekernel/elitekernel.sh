@@ -4,7 +4,7 @@
 mount -o remount,rw /system
 rm -f /system/lib/modules/*
 cp -fR /modules/*  /system/lib/modules
-chmod -R 0644 system/lib/modules
+chmod -R 0644 /system/lib/modules
 find /system/lib/modules -type f -name '*.ko' -exec chown 0:0 {} \;
 
 # make sure init.d is ok
