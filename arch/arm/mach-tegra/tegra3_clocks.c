@@ -850,14 +850,15 @@ static int tegra3_cpu_clk_set_rate(struct clk *c, unsigned long rate)
      * to port to any other platforms,
      * pls. modify lt_rate to lt_rate[NR_CPUS] accordingly
      */
-    
+    static unsigned long lt_rate = 0;
+
 	if (c->dvfs) {
 		if (!c->dvfs->dvfs_rail)
 			return -ENOSYS;
 		else if ((!c->dvfs->dvfs_rail->reg) &&
 			  (clk_get_rate_locked(c) < rate)) {
-			//WARN(1, "Increasing CPU rate while regulator is not"
-			//	" ready may overclock CPU\n"); // Devil-may-care
+			WARN(1, "Increasing CPU rate while regulator is not"
+				" ready may overclock CPU\n");
 			return -ENOSYS;
 		}
 	}
@@ -1645,7 +1646,6 @@ static int tegra3_pll_clk_set_rate(struct clk *c, unsigned long rate)
 {
 	u32 val, p_div, old_base;
 	unsigned long input_rate;
-	unsigned long flags = 0;
 	const struct clk_pll_freq_table *sel;
 	struct clk_pll_freq_table cfg;
 
@@ -1765,6 +1765,7 @@ static int tegra3_pll_clk_set_rate(struct clk *c, unsigned long rate)
 	}
 	MF_DEBUG("00000001");
 
+	unsigned long flags;
 	if (c->reg == 0xd0)
 		spin_lock_irqsave(&dc_spinlock_clk, flags);
 	clk_writel(val, c->reg + PLL_BASE);

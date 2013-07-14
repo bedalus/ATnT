@@ -268,16 +268,14 @@ static int ti_st_send_frame(struct sk_buff *skb)
 	/* Prepend skb with frame type */
 	memcpy(skb_push(skb, 1), &bt_cb(skb)->pkt_type, 1);
 
+	BT_DBG("%s: type %d len %d", hdev->name, bt_cb(skb)->pkt_type,
+			skb->len);
 
 	/* Insert skb to shared transport layer's transmit queue.
 	 * Freeing skb memory is taken care in shared transport layer,
 	 * so don't free skb memory here.
 	 */
-	if(hst->st_write != NULL)
-		len = hst->st_write(skb);
-	else
-		len = -1;
-
+	len = hst->st_write(skb);
 	if (len < 0) {
 		kfree_skb(skb);
 		BT_ERR("ST write failed (%ld)", len);

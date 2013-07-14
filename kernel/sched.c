@@ -623,19 +623,22 @@ static inline int cpu_of(struct rq *rq)
 /*
  * Return the group to which this tasks belongs.
  *
- * We cannot use task_subsys_state() and friends because the cgroup
- * subsystem changes that value before the cgroup_subsys::attach() method
- * is called, therefore we cannot pin it and might observe the wrong value.
- *
- * The same is true for autogroup's p->signal->autogroup->tg, the autogroup
- * core changes this before calling sched_move_task().
- *
- * Instead we use a 'copy' which is updated from sched_move_task() while
- * holding both task_struct::pi_lock and rq::lock.
+ * We use task_subsys_state_check() and extend the RCU verification with
+ * pi->lock and rq->lock because cpu_cgroup_attach() holds those locks for each
+ * task it moves into the cgroup. Therefore by holding either of those locks,
+ * we pin the task to the current cgroup.
  */
 static inline struct task_group *task_group(struct task_struct *p)
 {
-	return p->sched_task_group;
+	struct task_group *tg;
+	struct cgroup_subsys_state *css;
+
+	css = task_subsys_state_check(p, cpu_cgroup_subsys_id,
+			lockdep_is_held(&p->pi_lock) ||
+			lockdep_is_held(&task_rq(p)->lock));
+	tg = container_of(css, struct task_group, css);
+
+	return autogroup_task_group(p, tg);
 }
 
 /* Change a task's cfs_rq and parent entity if it moves across CPUs/groups */
@@ -3399,19 +3402,6 @@ void sched_set_stop_task(int cpu, struct task_struct *stop)
 		 * it can die in pieces.
 		 */
 		old_stop->sched_class = &rt_sched_class;
-
-		if (old_stop->state == TASK_RUNNING)
-			pr_warn("KERNEL_WARNING: %s(%p): old_stop->state == TASK_RUNNING\n",
-					old_stop->comm, old_stop);
-		if (old_stop->on_rq == 1)
-			pr_warn("KERNEL_WARNING: %s(%p): old_stop->on_rq == 1\n",
-					old_stop->comm, old_stop);
-
-		/*
-		 * also reset the schedule state as enqueue-able
-		 */
-		old_stop->on_rq = 0;
-		set_mb(old_stop->state, TASK_INTERRUPTIBLE);
 	}
 }
 
@@ -3556,7 +3546,7 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	 * a task's CPU. ->pi_lock for waking tasks, rq->lock for runnable tasks.
 	 *
 	 * sched_move_task() holds both and thus holding either pins the cgroup,
-	 * see task_group().
+	 * see set_task_rq().
 	 *
 	 * Furthermore, all task_rq users should acquire both locks, see
 	 * task_rq_lock().
@@ -7206,6 +7196,7 @@ static const char stat_nam[] = TASK_STATE_TO_CHAR_STR;
 
 void sched_show_task(struct task_struct *p)
 {
+	unsigned long free = 0;
 	unsigned state;
 
 	state = p->state ? __ffs(p->state) + 1 : 0;
@@ -7225,11 +7216,11 @@ void sched_show_task(struct task_struct *p)
 #ifdef CONFIG_DEBUG_STACK_USAGE
 	free = stack_not_used(p);
 #endif
-/*	printk(KERN_CONT "%5lu %5d %6d 0x%08lx c%d %llu\n", free,
+	printk(KERN_CONT "%5lu %5d %6d 0x%08lx c%d %llu\n", free,
 		task_pid_nr(p), task_pid_nr(p->real_parent),
 		(unsigned long)task_thread_info(p)->flags, p->on_cpu,
 		div64_u64(task_rq(p)->clock - p->sched_info.last_arrival, NSEC_PER_MSEC));
-*/
+
 #if defined(CONFIG_DEBUG_MUTEXES)
 	if (state == TASK_UNINTERRUPTIBLE)
 		if (p->blocked_by)
@@ -9970,7 +9961,6 @@ void sched_destroy_group(struct task_group *tg)
  */
 void sched_move_task(struct task_struct *tsk)
 {
-	struct task_group *tg;
 	int on_rq, running;
 	unsigned long flags;
 	struct rq *rq;
@@ -9984,12 +9974,6 @@ void sched_move_task(struct task_struct *tsk)
 		dequeue_task(rq, tsk, 0);
 	if (unlikely(running))
 		tsk->sched_class->put_prev_task(rq, tsk);
-
-	tg = container_of(task_subsys_state_check(tsk, cpu_cgroup_subsys_id,
-				lockdep_is_held(&tsk->sighand->siglock)),
-			  struct task_group, css);
-	tg = autogroup_task_group(tsk, tg);
-	tsk->sched_task_group = tg;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	if (tsk->sched_class->task_move_group)

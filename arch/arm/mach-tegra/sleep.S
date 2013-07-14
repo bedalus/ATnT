@@ -209,8 +209,6 @@ ENTRY(tegra_cpu_suspend)
 #endif
 	dsb
 
-	stmfd	sp!, {r4-r5, r7, r9-r11, lr}
-
 	/* Disable the data cache */
 	mrc	p15, 0, r10, c1, c0, 0
 	bic	r10, r10, #CR_C
@@ -219,10 +217,13 @@ ENTRY(tegra_cpu_suspend)
 	isb
 
 	/* Flush data cache */
-	bl	v7_flush_dcache_all
-
-	ldmfd	sp!, {r4-r5, r7, r9-r11, lr}
-
+#ifdef MULTI_CACHE
+	mov32	r10, cpu_cache
+	mov	lr, pc
+	ldr	pc, [r10, #CACHE_FLUSH_KERN_ALL]
+#else
+	bl	__cpuc_flush_kern_all
+#endif
 #ifdef CONFIG_CACHE_L2X0
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	cpu_id  r2
