@@ -39,9 +39,10 @@ static int try_to_freeze_tasks(bool sig_only)
 	unsigned int todo;
 	bool wq_busy = false;
 	struct timeval start, end;
-	u64 elapsed_csecs64;
-	unsigned int elapsed_csecs;
+	u64 elapsed_msecs64;
+    unsigned int elapsed_msecs;
 	bool wakeup = false;
+	int sleep_usecs = USEC_PER_MSEC;
 
 	do_gettimeofday(&start);
 
@@ -99,13 +100,15 @@ static int try_to_freeze_tasks(bool sig_only)
 		 * We need to retry, but first give the freezing tasks some
 		 * time to enter the regrigerator.
 		 */
-		msleep(10);
+		usleep_range(sleep_usecs / 2, sleep_usecs);
+	    if (sleep_usecs < 8 * USEC_PER_MSEC)
+	      sleep_usecs *= 2;
 	}
 
 	do_gettimeofday(&end);
-	elapsed_csecs64 = timeval_to_ns(&end) - timeval_to_ns(&start);
-	do_div(elapsed_csecs64, NSEC_PER_SEC / 100);
-	elapsed_csecs = elapsed_csecs64;
+	elapsed_msecs64 = timeval_to_ns(&end) - timeval_to_ns(&start);
+    do_div(elapsed_msecs64, NSEC_PER_MSEC);
+    elapsed_msecs = elapsed_msecs64;
 
 	if (todo) {
 		/* This does not unfreeze processes that are already frozen
@@ -120,9 +123,10 @@ static int try_to_freeze_tasks(bool sig_only)
 		}
 		else {
 			printk("\n");
-			printk(KERN_ERR "Freezing of tasks failed after %d.%02d seconds "
+			printk(KERN_ERR "Freezing of tasks %s after %d.%03d seconds "
 			       "(%d tasks refusing to freeze, wq_busy=%d):\n",
-			       elapsed_csecs / 100, elapsed_csecs % 100,
+			       wakeup ? "aborted" : "failed",
+			       elapsed_msecs / 1000, elapsed_msecs % 1000,
 			       todo - wq_busy, wq_busy);
 		}
 		thaw_workqueues();
@@ -131,22 +135,22 @@ static int try_to_freeze_tasks(bool sig_only)
 		do_each_thread(g, p) {
 			task_lock(p);
 			if (freezing(p) && !freezer_should_skip(p) &&
-				elapsed_csecs > 100)
+				elapsed_msecs > 1000)
 				sched_show_task(p);
 			cancel_freezing(p);
 			task_unlock(p);
 		} while_each_thread(g, p);
 		read_unlock(&tasklist_lock);
 	} else {
-		printk("(elapsed %d.%02d seconds) ", elapsed_csecs / 100,
-			elapsed_csecs % 100);
+		printk("(elapsed %d.%03d seconds) ", elapsed_msecs / 1000,
+			elapsed_msecs % 1000);
 	}
 
 	return todo ? -EBUSY : 0;
 }
 
 /**
- *	freeze_processes - tell processes to enter the refrigerator
+ * freeze_processes - Signal user space processes to enter the refrigerator.
  */
 int freeze_processes(void)
 {
@@ -154,20 +158,30 @@ int freeze_processes(void)
 
 	printk("Freezing user space processes ... ");
 	error = try_to_freeze_tasks(true);
-	if (error)
-		goto Exit;
-	printk("done.\n");
+	if (!error) {
+		printk("done.");
+		oom_killer_disable();
+	}
+	printk("\n");
+	BUG_ON(in_atomic());
+
+	return error;
+}
+
+/**
+ * freeze_kernel_threads - Make freezable kernel threads go to the refrigerator.
+ */
+int freeze_kernel_threads(void)
+{
+	int error;
 
 	printk("Freezing remaining freezable tasks ... ");
 	error = try_to_freeze_tasks(false);
-	if (error)
-		goto Exit;
-	printk("done.");
+	if (!error)
+		printk("done.");
 
-	oom_killer_disable();
- Exit:
-	BUG_ON(in_atomic());
 	printk("\n");
+	BUG_ON(in_atomic());
 
 	return error;
 }
